@@ -1,0 +1,196 @@
+#!/usr/bin/env ruby
+
+require 'yaml'
+require 'active_support'
+require 'active_support/core_ext'
+
+# constant
+VERSION="0.1"
+
+# variable
+$rc = 0
+
+def show_help()
+  puts ("oasis: Open Ansible and Serverspec Integrated Suite")
+  puts ("")
+  puts ("=== Usage === ")
+  puts ("* Bin/oasis [-h] [-v]")
+  puts ("    -h : show this help message")
+  puts ("    -v : show version")
+  puts ("")
+  puts ("* Bin/oasis role list")
+  puts ("    show installed role list")
+  puts ("")
+  puts ("* Bin/oasis role params ROLE")
+  puts ("    show default parameters of the specified role")
+  puts ("")
+  puts ("* Bin/oasis ansible exec [-a \"ARGS\"]")
+  puts ("    execute ansible")
+  puts ("    -a : with arguments of ansible-playbook command ARGS")
+  puts ("")
+  puts ("* Bin/suit serverspec exec")
+  puts ("    execute serverspec")
+end
+
+def show_version()
+  puts "oasis: #{ VERSION }"
+end
+
+def show_role_list()
+  system "ls -1 Lib/roles"
+  $rc = $?.to_i
+end
+
+def show_role_params(role)
+  if File.exists?("Lib/roles/" + role)
+    if File.exists?("Lib/roles/" + role + "/defaults/main.yml")
+      File.open("Lib/roles/" + role + "/defaults/main.yml") do |file|
+        file.each_line do |line|
+          puts line
+        end
+      end
+    else
+      puts "ERROR: role '#{ role }' doesn't have defaults/main.yml"
+    end
+  else
+      puts "ERROR: role '#{ role }' is not found"
+  end
+end
+
+def exec_ansible(args)
+  if File.exists?("Env/inventory.yml")
+    inventory_yaml = YAML.load_file("Env/inventory.yml")
+    inventory_yaml.each do |connection|
+      connection['roles'].each do |exec_role|
+        target_conns = []
+        inventory_yaml.each do |conn_search|
+          if conn_search['roles'].include?(exec_role)
+            target_conns << conn_search
+          end
+        end
+  
+        File.open("Lib/inventory",'w'){ |file| file = nil }
+        target_conns.each do |target|
+          inventory = ""
+          inventory += target['conn_name'] + " "
+          inventory += "ansible_host=" + target['conn_host'] + " "
+          inventory += "ansible_user=" + target['conn_user'] + " "
+          if target.has_key?('conn_pass')
+            inventory += "ansible_ssh_pass=" + target['conn_pass'] + " "
+          end
+          if target.has_key?('conn_idkey')
+            inventory += "ansible_ssh_private_key_file=../Env/" + target['conn_idkey'] + " "
+          end
+          if target.has_key?('conn_port')
+            inventory += "ansible_port=" + target['conn_port'].to_s + " "
+          end
+          inventory.chop!
+          inventory += "\n"
+          inventory_file = File.open("Lib/inventory", 'a')
+          inventory_file.write(inventory)
+          inventory_file.close()
+        end
+        if args == nil
+          system("cd Lib && ansible-playbook -i inventory site.yml -e \"role=#{ exec_role }\"")
+        else
+          system("cd Lib && ansible-playbook -i inventory site.yml -e \"role=#{ exec_role }\" #{ args }")
+        end
+      end
+      connection['roles'].each do |delete_role|
+        inventory_yaml.each do |conn_search|
+          conn_search['roles'].delete(delete_role)
+        end
+      end
+    end
+  else
+    puts "ERROR: Env/inventory.yml is not found"
+  end
+end
+
+def exec_serverspec()
+  if File.exists?("Env/inventory.yml")
+    inventory_yaml = YAML.load_file("Env/inventory.yml")
+    properties = {}
+    inventory_yaml.each do |connection|
+      property_path = "Env/host_vars/#{ connection['conn_name'] }.yml"
+      if File.exists?(property_path)  && !File.zero?(property_path)
+        property_yaml = YAML.load_file(property_path)
+        properties[connection['conn_name']] = property_yaml
+      else
+        properties[connection['conn_name']] = {}
+      end
+    end
+    properties_file = File.open("Lib/properties.yml", "w")
+    properties_file.write(YAML.dump(properties))
+    properties_file.close()
+    system("cd Lib && rake spec")
+  else
+    puts "ERROR: Env/inventory.yml is not found"
+  end
+end
+
+def parse(args)
+  arg0 = args.shift
+  arg1 = args.shift
+  arg2 = args.shift
+  arg3 = args.shift
+
+  case arg0
+  when nil, "-h"
+    show_help()
+  when "-v"
+    show_version()
+  when "role"
+    case arg1
+    when nil
+      puts "ERROR: specify subcommand of #{ arg0 }"
+    when "list"
+      show_role_list()
+    when "params"
+      case arg2
+      when nil
+        puts "ERROR: specify a role name"
+      else
+        show_role_params(arg2)
+      end
+    else
+      puts "ERROR: invalid subcommand #{ arg1 } of #{ arg0 }"
+    end
+  when "ansible"
+    case arg1
+    when nil
+      puts "ERROR: specify subcommand of #{ arg0 }"
+    when "exec"
+      case arg2
+      when nil
+        exec_ansible(nil)
+      when "-a"
+        case arg3
+        when nil
+          puts "ERROR: specify argments of option -a"
+        else
+          exec_ansible(arg3)
+        end
+      else
+        puts "ERROR: invalid option #{ arg2 }"
+      end
+    else
+      puts "ERROR: invalid subcommand #{ arg1 } of #{ arg0 }"
+    end
+  when "serverspec"
+    case arg1
+    when nil
+      puts "ERROR: specify subcommand of #{ arg0 }"
+    when "exec"
+      exec_serverspec()
+    else
+      puts "ERROR: invalid subcommand #{ arg1 } of #{ arg0 }"
+    end
+  else
+    puts "ERROR: invalid subcommand #{ arg0 } of Bin/oasis"
+  end
+end
+
+# main
+parse(ARGV)
+exit $rc
