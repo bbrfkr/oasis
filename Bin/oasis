@@ -38,7 +38,7 @@ end
 
 def show_role_list()
   system "ls -1 Lib/roles"
-  $rc = $?.to_i
+  $rc = $?.exitstatus
 end
 
 def show_role_params(role)
@@ -94,10 +94,10 @@ def exec_ansible(args)
         end
         if args == nil
           system("cd Lib && ansible-playbook -i inventory site.yml -e \"role=#{ exec_role }\"")
-          $rc=$?.to_i
+          $rc=$?.exitstatus
         else
           system("cd Lib && ansible-playbook -i inventory site.yml -e \"role=#{ exec_role }\" #{ args }")
-          $rc=$?.to_i
+          $rc=$?.exitstatus
         end
       end
       connection['roles'].each do |delete_role|
@@ -129,7 +129,7 @@ def exec_serverspec()
     properties_file.write(YAML.dump(properties))
     properties_file.close()
     system("cd Lib && rake spec")
-    $rc=$?.to_i
+    $rc=$?.exitstatus
   else
     puts "ERROR: Env/inventory.yml is not found"
     $rc=1
@@ -211,3 +211,4 @@ end
 # main
 parse(ARGV)
 exit $rc
+
