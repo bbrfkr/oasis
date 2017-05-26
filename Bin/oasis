@@ -38,7 +38,7 @@ end
 
 def show_role_list()
   system "ls -1 Lib/roles"
-  $rc = $?.to_i
+  $rc = $?.exitstatus
 end
 
 def show_role_params(role)
@@ -51,9 +51,11 @@ def show_role_params(role)
       end
     else
       puts "ERROR: role '#{ role }' doesn't have defaults/main.yml"
+      $rc=1
     end
   else
-      puts "ERROR: role '#{ role }' is not found"
+    puts "ERROR: role '#{ role }' is not found"
+    $rc=1
   end
 end
 
@@ -92,8 +94,10 @@ def exec_ansible(args)
         end
         if args == nil
           system("cd Lib && ansible-playbook -i inventory site.yml -e \"role=#{ exec_role }\"")
+          $rc=$?.exitstatus
         else
           system("cd Lib && ansible-playbook -i inventory site.yml -e \"role=#{ exec_role }\" #{ args }")
+          $rc=$?.exitstatus
         end
       end
       connection['roles'].each do |delete_role|
@@ -104,6 +108,7 @@ def exec_ansible(args)
     end
   else
     puts "ERROR: Env/inventory.yml is not found"
+    $rc=1
   end
 end
 
@@ -124,8 +129,10 @@ def exec_serverspec()
     properties_file.write(YAML.dump(properties))
     properties_file.close()
     system("cd Lib && rake spec")
+    $rc=$?.exitstatus
   else
     puts "ERROR: Env/inventory.yml is not found"
+    $rc=1
   end
 end
 
@@ -144,22 +151,26 @@ def parse(args)
     case arg1
     when nil
       puts "ERROR: specify subcommand of #{ arg0 }"
+      $rc=1
     when "list"
       show_role_list()
     when "params"
       case arg2
       when nil
         puts "ERROR: specify a role name"
+        $rc=1
       else
         show_role_params(arg2)
       end
     else
       puts "ERROR: invalid subcommand #{ arg1 } of #{ arg0 }"
+      $rc=1
     end
   when "ansible"
     case arg1
     when nil
       puts "ERROR: specify subcommand of #{ arg0 }"
+      $rc=1
     when "exec"
       case arg2
       when nil
@@ -168,29 +179,36 @@ def parse(args)
         case arg3
         when nil
           puts "ERROR: specify argments of option -a"
+          $rc=1
         else
           exec_ansible(arg3)
         end
       else
         puts "ERROR: invalid option #{ arg2 }"
+        $rc=1
       end
     else
       puts "ERROR: invalid subcommand #{ arg1 } of #{ arg0 }"
+      $rc=1
     end
   when "serverspec"
     case arg1
     when nil
       puts "ERROR: specify subcommand of #{ arg0 }"
+      $rc=1
     when "exec"
       exec_serverspec()
     else
       puts "ERROR: invalid subcommand #{ arg1 } of #{ arg0 }"
+      $rc=1
     end
   else
     puts "ERROR: invalid subcommand #{ arg0 } of Bin/oasis"
+    $rc=1
   end
 end
 
 # main
 parse(ARGV)
 exit $rc
+
